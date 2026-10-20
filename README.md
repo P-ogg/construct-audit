@@ -4,7 +4,7 @@ Give it the articles of a literature. It shows where measures that share a const
 (*jingle*), where different names may be one thing (*jangle*), and where one kind of measure is filed under
 several constructs.
 
-**Try it:** https://construct-audit.streamlit.app/
+**Try it:** https://construct-audit.streamlit.app/ · **Website:** https://p-ogg.github.io/construct-audit/
 
 Articles in, audit report out:
 
