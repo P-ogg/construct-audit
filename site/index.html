@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Construct Audit</title>
+<meta name="description" content="This LLM pipeline shows where measures that share a construct name behave differently, and where different names may be one construct.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,650&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1d1d1b;--muted:#6b6a65;--line:#e4e1d8;--card:#ffffff;--soft:#f3f1ea;
+  --accent:#b4441b;--accent-soft:#f6e3d9;--a:#2d5f8b;--b:#c0782a;--c:#5a8a4a;--d:#8a4f8f;--e:#7d7a70;--f:#3e8f8f;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#161614;--fg:#ecebe6;--muted:#a19f97;--line:#34332f;--card:#1f1f1c;--soft:#252521;
+  --accent:#f08a5d;--accent-soft:#3a2419;--a:#7fb2e0;--b:#e8a65c;--c:#94c780;--d:#c99bd0;--e:#b3b0a6;--f:#7fcfcf;}}
+:root[data-theme="dark"]{
+  --bg:#161614;--fg:#ecebe6;--muted:#a19f97;--line:#34332f;--card:#1f1f1c;--soft:#252521;
+  --accent:#f08a5d;--accent-soft:#3a2419;--a:#7fb2e0;--b:#e8a65c;--c:#94c780;--d:#c99bd0;--e:#b3b0a6;--f:#7fcfcf;}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font:17px/1.6 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;margin:0}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+nav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:20px;height:56px}
+nav .brand{font-family:"Source Serif 4",Georgia,serif;font-weight:650;font-size:1.1rem;margin-right:auto;color:var(--fg);text-decoration:none}
+nav a{color:var(--muted);text-decoration:none;font-size:.92rem}
+nav a:hover{color:var(--fg)}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;font-weight:650;line-height:1.2}
+h1{font-size:clamp(2.1rem,5vw,3.3rem);margin:0 0 .4em;letter-spacing:-.01em}
+h2{font-size:clamp(1.5rem,3vw,2rem);margin:0 0 .5em}
+h3{font-size:1.15rem;margin:0 0 .4em}
+p{margin:0 0 1em}
+.muted{color:var(--muted)}
+section{padding:72px 0;border-bottom:1px solid var(--line)}
+.hero{padding:88px 0 72px}
+.lede{font-size:1.2rem;max-width:40em;color:var(--muted)}
+.btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
+.btn{display:inline-block;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;border:1px solid var(--line);color:var(--fg);background:var(--card)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#1d1d1b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{color:#1d1d1b}}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px}
+.tag{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.step b{display:block;font-family:"Source Serif 4",Georgia,serif;font-size:2rem;color:var(--accent);line-height:1}
+.finding{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:center}
+@media (max-width:760px){.finding{grid-template-columns:1fr}}
+.finding+.finding{margin-top:20px}
+.pair{display:grid;grid-template-columns:150px 1fr 44px;gap:10px;align-items:center;font-size:.9rem;margin:8px 0}
+.track{height:14px;background:var(--soft);border-radius:4px;position:relative;overflow:hidden}
+.track i{position:absolute;top:0;bottom:0;border-radius:4px}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.note{font-size:.85rem;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:right}
+th:first-child,td:first-child{text-align:left}
+.scroll{overflow-x:auto}
+.flag{color:var(--accent);font-weight:600}
+/* app */
+.appframe{width:100%;height:960px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+footer{padding:40px 0 60px;font-size:.9rem;color:var(--muted)}
+footer a{color:var(--muted)}
+a{color:var(--accent)}
+.themebtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:4px 8px;font:inherit;font-size:.8rem;cursor:pointer}
+@media (max-width:640px){nav .wrap{gap:10px}nav .links{font-size:.82rem}section{padding:52px 0}.hero{padding:56px 0 48px}.pair{grid-template-columns:110px 1fr 40px}}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="brand" href="#top">Construct Audit</a>
+  <span class="links"><a href="#problem">Why</a> &nbsp; <a href="#how">How</a> &nbsp; <a href="#example">Example</a> &nbsp; <a href="#app">Try it</a></span>
+  <button class="themebtn" id="theme" aria-label="Switch light or dark">◐</button>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <span class="tag">An LLM pipeline for auditing constructs</span>
+  <h1>Check whether a literature’s constructs add up.</h1>
+  <p class="lede">This LLM pipeline shows where measures that share a construct name behave differently, and where different names may be one construct.</p>
+  <div class="btns">
+    <a class="btn primary" href="#app">Audit a literature</a>
+    <a class="btn" href="#example">See an example</a>
+  </div>
+</div></header>
+
+<section id="problem"><div class="wrap">
+  <h2>Why audit constructs?</h2>
+  <p class="lede">Knowledge should build on cumulative findings. When one construct name is used to describe different phenomena, findings conflict and are hard to aggregate meaningfully. When the same phenomenon is studied under different construct names, research effort is split and knowledge accumulates more slowly than it needs to.</p>
+  <div class="grid2" style="margin-top:28px">
+    <div class="card"><span class="tag">Jingle</span><h3>One construct name, different concepts</h3>
+      <p>Two studies both measure “firm performance”. One uses return on assets. The other uses Tobin’s q. Pooling them might blur our understanding of firm performance instead of expanding it.</p></div>
+    <div class="card"><span class="tag">Jangle</span><h3>Different construct names, one concept</h3>
+      <p>Job satisfaction and organisational commitment have their own literatures. Once measurement error is removed, they can correlate close to 1 (Le et al. 2010). When two names relate to everything else in the same way, the field may be counting one finding twice.</p></div>
+  </div>
+  <p class="muted" style="margin-top:24px">This LLM pipeline reads articles and runs checks for construct validity. Human researchers are left to judge the results.</p>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2>How it works</h2>
+  <div class="grid4" style="margin-top:24px">
+    <div class="card step"><b>1</b><h3>Read</h3><p>Two LLM coders read each article separately and copy its correlation table. A third settles their disagreements. What it cannot settle is listed for you to check. The existence of every number found by an LLM is mechanically checked against the article by a Python script.</p></div>
+    <div class="card step"><b>2</b><h3>Group</h3><p>Variables are grouped into constructs. You can upload your own construct codebook, otherwise an LLM will draft one.</p></div>
+    <div class="card step"><b>3</b><h3>Separate</h3><p>How each variable was measured (a count from a database, a survey scale…) is kept apart from what it is called.</p></div>
+    <div class="card step"><b>4</b><h3>Check</h3><p>Each kind of measure gets a profile: its correlations with common constructs. Profiles are compared with each other and with random splits.</p></div>
+  </div>
+  <p class="muted" style="margin-top:24px">This LLM pipeline requires an API key to run. It runs on proprietary models (e.g. Claude) or on open models (through OpenRouter, Groq, or your own computer). Your API key stays in your browser session and is never stored.</p>
+</div></section>
+
+<section id="example"><div class="wrap">
+  <span class="tag">Example</span>
+  <h2>What a report looks like</h2>
+  <p class="lede">Here is what a report looks like, on a simulated literature of 160 studies with planted problems. Every number is invented.</p>
+
+  <div class="card finding" style="margin-top:28px">
+    <div><span class="tag">Jingle</span><h3>One construct name hiding two different profiles</h3>
+      <p>In this simulated literature, “job performance” is rated by supervisors in some studies and by the employees themselves in others. The two measures relate to other variables differently. For example, self-ratings move with job satisfaction; supervisor ratings barely do.</p></div>
+    <div>
+      <div class="note" style="margin-bottom:6px">Correlation with job satisfaction</div>
+      <div class="pair"><span>Self-rated</span><div class="track"><i style="left:0;width:66%;background:var(--a)"></i></div><span class="num">.66</span></div>
+      <div class="pair"><span>Supervisor-rated</span><div class="track"><i style="left:0;width:12%;background:var(--b)"></i></div><span class="num">.12</span></div>
+    </div>
+  </div>
+
+  <p style="margin-top:28px">Your report shows the same checks for your literature. <a href="examples/audit_report.html">Open the full example report</a>; it lists the problems that were planted, so you can see that the checks find them.</p>
+</div></section>
+
+<section id="app"><div class="wrap">
+  <h2>Audit your literature</h2>
+  <p class="muted">Upload PDFs, choose a model, add an API key, and get the report. Up to 100 articles here; larger sets need to be run from the command line. Already coded your studies? Upload them with the Excel template in the app; no API key is needed. If nobody has used the app for a while, it may take a minute to wake up. <a href="https://construct-audit.streamlit.app/" target="_blank" rel="noopener">Open in a new tab</a>.</p>
+  <iframe class="appframe" src="https://construct-audit.streamlit.app/?embed=true&amp;embed_options=show_toolbar" title="Construct audit app" loading="lazy" allow="clipboard-write"></iframe>
+</div></section>
+
+<footer><div class="wrap">
+  <p>Findings are evidence for human researchers to judge, not verdicts.</p>
+  <p>Open source under the MIT licence.</p>
+</div></footer>
+
+<script>
+(function(){
+  // theme toggle (remembered per browser where storage allows)
+  const root=document.documentElement, btn=document.getElementById('theme');
+  try{const t=localStorage.getItem('theme'); if(t) root.dataset.theme=t;}catch(e){}
+  btn.onclick=()=>{const dark=root.dataset.theme?root.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme=dark?'light':'dark'; try{localStorage.setItem('theme',root.dataset.theme);}catch(e){}};
+
+})();
+</script>
+</body>
+</html>

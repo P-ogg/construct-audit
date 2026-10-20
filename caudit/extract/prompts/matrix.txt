@@ -1,0 +1,76 @@
+You are transcribing the CORRELATION MATRIX of an empirical research article, for an audit of how a research field measures its constructs.
+
+Every correlation you report must be printed in the article. Read the numbers off the page; never compute, round, average or infer one. "NOT_FOUND" is always allowed and always better than a guess.
+
+=================================================================
+THE VARIABLES ARE ALREADY NUMBERED — DO NOT RENUMBER THEM
+=================================================================
+The article's variables have already been listed, numbered in matrix order. Use these numbers exactly. If the matrix contains a variable that is not in the list, do not code it: record it in "unlisted_variables".
+
+{VARIABLE_LIST}
+
+=================================================================
+ONE MATRIX, OR SEVERAL? — DECIDE THIS FIRST
+=================================================================
+ONE matrix broken up by the layout — code it as ONE study: the blocks cover DIFFERENT columns of one variable list, or rows run on to the next page, or the table is marked "continued". Put together, the blocks contain each pair of variables exactly once.
+SEPARATE matrices — EACH its OWN study: each block is a full matrix over the same variables, so the same pair appears in more than one block, usually with a different value; the blocks are headed by a subsample, group, period, level of analysis or study ("Study 1" / "Study 2", "Firm level" / "Project level"). Different Ns are another sign.
+The check that settles it: pick one pair of variables and look for it in every block. Found once: one matrix. Found twice or more: separate matrices.
+For separate matrices emit one object in "studies" per matrix, numbered in the order printed, each with its own rows. Never put two matrices into one study.
+
+=================================================================
+TRANSCRIBE THE MATRIX ROW BY ROW
+=================================================================
+Do NOT pair up the variables yourself. Transcribe the table one row at a time; the pairing is worked out mechanically afterwards.
+
+For each printed row, give one object in "matrix_rows":
+  "variable"      the row's variable number, READ FROM THE TABLE
+  "label"         the row's name exactly as printed at its start
+  "first_column"  the variable number of the column the FIRST value you list sits under
+  "values"        the values in that row, left to right, with no gaps
+
+A standard lower triangle means "first_column": 1 and a row that stops just before the diagonal: row 5 has four values. An upper triangle means "first_column" is one more than "variable". A panel showing columns 8 onward means "first_column": 8.
+
+Take everything about a row from that row: read its number and name, count the cells actually printed (do not make it match a triangle), note the column the leftmost sits under, copy the values. Do not carry an assumption from one row into the next. Plenty of tables leave their first rows empty: if the first numbers appear beside "3 External knowledge search", your first object is variable 3, with two values.
+
+- Report each number EXACTLY as printed: "-0.11", "-.11", ".48", "0,48". Drop significance stars, daggers and parentheses.
+- The minus signs matter as much as the digits. In the extracted text of many PDFs a minus is an unmapped glyph, so a negative can look positive there. Take the sign from the page image when there is one. Before finishing, count your negatives: a matrix of a dozen variables with no negative values almost never exists.
+- A genuine gap in a row: split it into two objects with the right "first_column" for each.
+- No diagonal (reliabilities or 1.00 printed there are not correlations). No cell twice.
+- Include EVERY printed row, controls included, including rows continued in a second panel.
+
+=================================================================
+HOW THESE TABLES ARE PRINTED
+=================================================================
+Expect rotated tables (printed sideways: turn the page in your head), panels, continuations, scrambled or reversed extracted text (the page image is the authority), light dashes for minus signs. "unreadable" is for a cell you genuinely cannot make out; it is almost never right for a whole matrix.
+
+If the article prints no correlation matrix at all, say so ("correlation_matrix_present": false) and emit no rows. Do not reconstruct correlations from regressions or significance levels. If a matrix is incomplete, code every printed cell and list in "missing_pairs" only cells you expected and could not find.
+
+=================================================================
+OUTPUT
+=================================================================
+Respond with ONLY this JSON object:
+
+{
+  "page_basis": "printed_journal_page" | "pdf_sheet_number",
+  "studies": [
+    {
+      "study": 1,
+      "correlation_matrix_present": true,
+      "matrix_location": "<Table 2, p. 1752 or NOT_FOUND>",
+      "matrix_quote": "<verbatim caption, note or row of the table>",
+      "matrix_page": null,
+      "unlisted_variables": [],
+      "missing_pairs": [],
+      "matrix_rows": [
+        {"variable": 2, "label": "Innovation quality", "first_column": 1, "values": ["0.48"]}
+      ],
+      "confidence": "high" | "medium" | "low"
+    }
+  ]
+}
+
+Overriding rules:
+- Variable numbers come from the list above. Transcribe rows; never pair variables yourself.
+- Every number is copied from the page, sign included. Nothing is computed.
+- One study per separate matrix; never merge two, never split one.
+- The matrix quote is copied from the article, never from these instructions.

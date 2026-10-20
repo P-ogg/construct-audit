@@ -1,0 +1,78 @@
+You are listing the VARIABLES of an empirical research article, for an audit of how a research field measures its constructs.
+
+Use ONLY the article. If something is not in it, it is not reported. Quotes are checked character-for-character against the article by a program, so copy them; never paraphrase. "NOT_FOUND" is always allowed and always better than a guess.
+
+=================================================================
+ONE STUDY, OR SEVERAL? — DECIDE THIS FIRST
+=================================================================
+Emit one object in "studies" per study. A study is a sample with its own correlation matrix.
+
+A SEPARATE study for each separate correlation matrix on a DIFFERENT sample: the same variables again for another subsample, group, period, level of analysis or study ("Study 1" / "Study 2", "US firms" / "European firms", "managers" / "employees"). Different Ns for the blocks are another sign.
+The check that settles it: pick one pair of variables and look for it in every block of the correlation table. Found in one block only: one matrix. Found in two or more: separate matrices, so separate studies.
+
+NOT a separate study:
+- one matrix broken up by the layout (columns 1-10 on top, 11-23 underneath), or continued on the next page;
+- a second table of DIFFERENT variables on the SAME sample (items of a scale, descriptives of a subset);
+- the same variable at several time points inside ONE matrix (T1 and T2 versions, a lagged variable): one study, each version its own variable with its own number;
+- several regression models, dependent variables or robustness checks estimated on one sample.
+
+=================================================================
+WHICH VARIABLES, IN WHAT ORDER
+=================================================================
+List EVERY variable in the study's correlation matrix, controls included, in the matrix's own order, numbered 1, 2, 3, ... straight through. The numbers must match the row numbers of the matrix, because the correlations are keyed on them. Never repeat a number within a study. If the article has no correlation matrix, list the variables of the main analysis in the order the measures section presents them.
+
+For each variable, EVIDENCE FIRST, then the fields that depend on it:
+- "name": the label used in the correlation matrix.
+- "description_quote": a verbatim sentence from the article describing how the variable was measured (items, scale, formula, data source). NOT_FOUND if the article gives none.
+- "description": 10-25 words in your own words: WHAT was measured and HOW (e.g. "number of patent applications filed in year t+1, log-transformed"; "five-item 7-point Likert scale of affective commitment"; "supervisor rating of task performance on three items").
+- "instrument": the published scale or established measure the article says it used, as author(s) and year if given (e.g. "Allen & Meyer 1990", "Tobin's q", "Kirkman & Rosen 1999, adapted"), or "" if none is named.
+- "measure_form": the FORM of the measure, one of:
+    "multi-item scale"        several questionnaire items combined
+    "single-item rating"      one questionnaire item or rating
+    "count"                   a number of things or events (patents, alliances, employees, absences)
+    "ratio or share"          a proportion, percentage or one quantity divided by another
+    "amount"                  money or another continuous quantity (sales, assets, salary, hours)
+    "yes/no indicator"        a dummy or binary variable
+    "time or age"             years, months, tenure, age, duration
+    "index"                   a computed composite of several indicators (e.g. a diversity or concentration index)
+    "category"                a categorical code that is not yes/no
+    "other"                   none of the above
+- "source_quote": verbatim words that show where the data came from (a questionnaire, a supervisor, a database, records, observation, an experiment), or NOT_FOUND.
+- "data_type": WHO or WHAT produced the score:
+    "survey"        the focal respondents reported it themselves in a questionnaire or interview (self-report)
+    "other-report"  someone else rated the focal unit: a supervisor, peer, subordinate, customer or expert
+    "archival"      a database, records, filings, patents, financial statements or other secondary data
+    "observed"      researchers observed, coded or manipulated it (behaviour coding, lab task, experimental condition)
+    "unknown"       the article does not say
+- "reliability_quote": verbatim words reporting this variable's reliability (e.g. "Cronbach's alpha = 0.84"), or NOT_FOUND.
+- "reliability": the number from that quote (prefer Cronbach's alpha where several are reported); "" if none, or if the article gives only a range across several variables. Reliabilities printed on the diagonal of the correlation matrix count.
+
+For each study, also:
+- "n_quote": verbatim words stating the study's sample size (often in the table note: "N = 312"), or NOT_FOUND.
+- "n": the number from that quote, or "".
+
+=================================================================
+OUTPUT
+=================================================================
+Respond with ONLY this JSON object:
+
+{
+  "page_basis": "printed_journal_page" | "pdf_sheet_number",
+  "studies": [
+    {
+      "study": 1,
+      "matrix_location": "<e.g. Table 2, p. 1752, or NOT_FOUND>",
+      "n_quote": "<verbatim or NOT_FOUND>",
+      "n": "",
+      "variables": [
+        {"variable": 1, "name": "", "description_quote": "", "description": "", "instrument": "", "measure_form": "", "source_quote": "", "data_type": "",
+         "reliability_quote": "", "reliability": "", "page": null}
+      ]
+    }
+  ]
+}
+
+Overriding rules:
+- Quotes verbatim from the article, never from these instructions.
+- Variable numbers follow the correlation matrix; never renumber.
+- Every row of the correlation matrix gets a variable, controls included.

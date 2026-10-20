@@ -1,0 +1,20 @@
+.env
+*.env
+__pycache__/
+.DS_Store
+*.pdf
+examples/**/correlations.csv
+examples/**/variables.csv
+# old model replies and PDF text caches (contain article text): never publish
+examples/**/replay_work/
+*.txt.cache
+# row-level team data: not published until the team agrees
+examples/innovation/variables.csv
+examples/innovation/correlations.csv
+site/*.docx
+
+# run logs and stray outputs
+*.log
+tpl_report.html
+examples/innovation/replay_old_outputs.py
+examples/innovation/

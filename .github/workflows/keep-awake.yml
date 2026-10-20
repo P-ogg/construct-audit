@@ -1,0 +1,21 @@
+# The free Streamlit hosting puts the app to sleep after about 12 hours without visitors.
+# GitHub pauses scheduled jobs in public repositories after 60 days without commits: re-enable it under Actions if so.
+# This job opens the app in a headless browser every 6 hours (and wakes it if it is asleep), so visitors never wait.
+name: Keep the app awake
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pip install playwright==1.48.0 && python -m playwright install --with-deps chromium
+      - run: python .github/scripts/wake.py https://construct-audit.streamlit.app/
