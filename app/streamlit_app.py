@@ -272,11 +272,11 @@ with tab_run:
     if ss.get("prepared"):
         st.success(ss.prepared)
     if "summary" in ss and not ss.summary.empty:
-        st.dataframe(ss.summary.rename(columns=SUMMARY_COLUMNS), hide_index=True, use_container_width=True)
+        st.dataframe(ss.summary.rename(columns=SUMMARY_COLUMNS), hide_index=True, width="stretch")
     if isinstance(ss.get("flags"), pd.DataFrame) and not ss.flags.empty:
         with st.expander(f"Rows to check ({len(ss.flags)})"):
             st.caption("The tool found something it could not confirm. Look at the article before trusting the value.")
-            st.dataframe(run.describe_flags(ss.flags), hide_index=True, use_container_width=True)
+            st.dataframe(run.describe_flags(ss.flags), hide_index=True, width="stretch")
 
     st.subheader("4. Review constructs and measures (optional)")
     edited_cb, edited_mc = None, None
@@ -287,7 +287,7 @@ with tab_run:
             st.markdown("**Constructs.** Each variable name and the construct it was put in. To move a variable, type a different construct.")
             inv = codebook.inventory(ss.V)[["label", "articles"]]
             table = inv.merge(ss.codebook[["label", "construct"]], on="label", how="left").fillna({"construct": ""})
-            edited_cb = st.data_editor(table, hide_index=True, use_container_width=True, height=320, key=f"cb_edit_{ss.version}",
+            edited_cb = st.data_editor(table, hide_index=True, width="stretch", height=320, key=f"cb_edit_{ss.version}",
                                        column_config={"articles": st.column_config.NumberColumn(disabled=True),
                                                       "label": st.column_config.TextColumn("variable name", disabled=True)})
         if ss.get("V_measures") is not None and (ss.V_measures.measure.fillna("") != "").any():
@@ -296,7 +296,7 @@ with tab_run:
             mc = (ss.V_measures.groupby("measure").agg(articles=("article", "nunique"), variables=("var", "size"))
                   .reset_index().sort_values("articles", ascending=False))
             mc["rename to"] = ""
-            edited_mc = st.data_editor(mc, hide_index=True, use_container_width=True, height=300, key=f"mc_edit_{ss.version}",
+            edited_mc = st.data_editor(mc, hide_index=True, width="stretch", height=300, key=f"mc_edit_{ss.version}",
                                        column_config={"measure": st.column_config.TextColumn(disabled=True),
                                                       "articles": st.column_config.NumberColumn(disabled=True),
                                                       "variables": st.column_config.NumberColumn(disabled=True)})
