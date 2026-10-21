@@ -266,8 +266,10 @@ with tab_run:
         waits_before = sum(getattr(u, 'waits', 0) for _, u in ss.coders.usage())
 
         def show(status):
-            rows = [dict(article=Path(p).stem, step=status[p][0] if p in status else "waiting for its turn",
-                         minutes=round(status[p][1] / 60, 1) if p in status else None) for p in batch]
+            rows = [{"article": Path(p).stem, "step": status[p][0] if p in status else "waiting for its turn",
+                     "time on this step": ("starting soon" if p not in status else "done" if status[p][0] == "done"
+                                           else "stopped" if status[p][0] == "could not be read" else f"{status[p][1]:.0f} s")}
+                    for p in batch]
             live.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
             if sum(getattr(u, 'waits', 0) for _, u in ss.coders.usage()) > waits_before:
                 limit_note.warning("Your model account's speed limit is slowing this down. The tool waits and continues by itself. "
