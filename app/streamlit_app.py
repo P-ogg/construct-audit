@@ -74,7 +74,8 @@ tab_run, tab_about = st.tabs(["Audit your articles", "How it works"])
 with tab_run:
     st.subheader("1. Articles")
     pdfs = st.file_uploader(f"Upload the articles (PDF, up to {MAX_PDFS})", type="pdf", accept_multiple_files=True,
-                            help="Each article should report a correlation table. PDFs are deleted as soon as they have been read.")
+                            help="Each article should report a correlation table. Each article takes a few minutes, so 100 articles take a few hours: "
+                                 "keep the tab open and save your progress now and then. PDFs are deleted as soon as they have been read.")
     names = [f.name for f in pdfs or []]
     if len(set(names)) < len(names):
         st.warning("Some PDFs have the same file name. Rename them so each article has its own name; otherwise one replaces the other.")
