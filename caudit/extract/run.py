@@ -13,7 +13,8 @@ Every model reply is saved before anything else and never overwritten, so a run 
 Every decision is written to a log: who decided each value and why.
 """
 import base64, hashlib, io, json, os, re, zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as _wait
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -122,9 +123,19 @@ def forget_text(pdf_path, workdir, article_id=None):
         f.unlink(missing_ok=True)
 
 
-def extract_article(pdf_path, coders, workdir, article_id=None):
+def _both(f, g):
+    """Run the two coders' calls at the same time: they are independent by design."""
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a, b = pool.submit(f), pool.submit(g)
+        return a.result(), b.result()
+
+
+def extract_article(pdf_path, coders, workdir, article_id=None, progress=None):
+    """progress(text) is called at each step, from this article's thread."""
+    say = progress or (lambda s: None)
     pdf_path = Path(pdf_path); art = article_id or pdf_path.stem
     wd = article_dir(pdf_path, workdir, article_id); wd.mkdir(parents=True, exist_ok=True)
+    say("extracting the text")
     text = pdfx.pdf_text(pdf_path, cache_dir=wd)
     hay = verify.haystack(text)
     log, flags = [], []
@@ -138,8 +149,9 @@ def extract_article(pdf_path, coders, workdir, article_id=None):
                                                               doc=_doc(client, pdf_path, text), images=imgs(), doc_first=doc_first))
 
     # 1-2. variables and roster
-    va = ask(coders.var_a, PROMPT_VARS, VAR_SCHEMA, "variables_a", doc_first=True)
-    vb = ask(coders.var_b, PROMPT_VARS, VAR_SCHEMA, "variables_b", doc_first=False)
+    say("listing the variables (both coders)")
+    va, vb = _both(lambda: ask(coders.var_a, PROMPT_VARS, VAR_SCHEMA, "variables_a", doc_first=True),
+                   lambda: ask(coders.var_b, PROMPT_VARS, VAR_SCHEMA, "variables_b", doc_first=False))
     roster = vb
     items = []                                   # disagreements for the reviewer
     sa = {s["study"]: s for s in va["studies"]}
@@ -176,8 +188,9 @@ def extract_article(pdf_path, coders, workdir, article_id=None):
 
     # 3. matrix, both coders keyed to the roster
     prompt = PROMPT_MATRIX.replace("{VARIABLE_LIST}", roster_list)
-    ma = ask(coders.mat_a, prompt, MATRIX_SCHEMA, "matrix_a", doc_first=True)
-    mb = ask(coders.mat_b, prompt, MATRIX_SCHEMA, "matrix_b", doc_first=False)
+    say("copying the correlation table (both coders)")
+    ma, mb = _both(lambda: ask(coders.mat_a, prompt, MATRIX_SCHEMA, "matrix_a", doc_first=True),
+                   lambda: ask(coders.mat_b, prompt, MATRIX_SCHEMA, "matrix_b", doc_first=False))
 
     # compare cells: agreements are kept, disagreements go to the reviewer with the variable disagreements
     def cellmap(m):
@@ -205,6 +218,8 @@ def extract_article(pdf_path, coders, workdir, article_id=None):
                               f"'{names.get((k[0], k[2]), k[2])}' (variables {k[1]} and {k[2]})", a, b))
 
     # 4. one reviewer pass for all disagreements of the article; Python decides whether each answer stands
+    if items:
+        say(f"settling {len(items)} disagreement(s) (reviewer)")
     decided = rvw.settle(items, lambda p, n: ask(coders.reviewer, p, rvw.SCHEMA, f"review_{n}", doc_first=False, system=rvw.SYSTEM), hay) if items else {}
     vars_by = {(s["study"], v["variable"]): v for s in roster["studies"] for v in s["variables"]}
     study_by = {s["study"]: s for s in roster["studies"]}
@@ -232,6 +247,7 @@ def extract_article(pdf_path, coders, workdir, article_id=None):
                               detail=f"{it['where']}, {it['field']}: A {it['a'] or '-'}, B {it['b'] or '-'}, used {val or '-'} ({why})"))
 
     # 5. verify
+    say("checking quotes and numbers")
     for s in roster["studies"]:
         if s.get("n_quote") and s["n_quote"] != "NOT_FOUND" and verify.check_quote(s["n_quote"], hay)[0] == "fail":
             flags.append(dict(article=art, study=s["study"], check="quote_not_found", detail=f"sample size quote: {s['n_quote'][:80]}"))
@@ -310,20 +326,31 @@ def describe_flags(flags):
     return out
 
 
-def extract_many(pdfs, coders, workdir, workers=5, on_done=None):
+def extract_many(pdfs, coders, workdir, workers=5, on_done=None, on_tick=None, tick=2.0):
     """Read several articles at once (each article's own steps stay in order). Returns {pdf path: result or exception}.
-    on_done(path, result_or_exception, n_done) is called as each article finishes. Saved replies make a rerun resume."""
-    out = {}
+    on_done(path, result_or_exception, n_done) is called as each article finishes. on_tick(status) is called every
+    `tick` seconds from the calling thread with {pdf path: (current step, seconds on it)}, for a live progress display.
+    Saved replies make a rerun resume."""
+    out, status = {}, {}
+    def track(p):
+        return lambda s: status.__setitem__(p, (s, time.time()))
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(extract_article, p, coders, workdir): p for p in pdfs}
-        for f in as_completed(futures):
-            p = futures[f]
-            try:
-                out[p] = f.result()
-            except Exception as e:                   # one bad article must not stop a literature
-                out[p] = e
-            if on_done:
-                on_done(p, out[p], len(out))
+        futures = {pool.submit(extract_article, p, coders, workdir, None, track(p)): p for p in pdfs}
+        pending = set(futures)
+        while pending:
+            done, pending = _wait(pending, timeout=tick, return_when=FIRST_COMPLETED)
+            for f in done:
+                p = futures[f]
+                try:
+                    out[p] = f.result()
+                except Exception as e:               # one bad article must not stop a literature
+                    out[p] = e
+                status[p] = ("done" if not isinstance(out[p], Exception) else "could not be read", time.time())
+                if on_done:
+                    on_done(p, out[p], len(out))
+            if on_tick:
+                now = time.time()
+                on_tick({p: (s, now - t) for p, (s, t) in status.items()})
     return out
 
 

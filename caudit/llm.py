@@ -33,6 +33,12 @@ class Usage:
     output_tokens: int = 0
     log: list = field(default_factory=list)
     price: tuple = None              # ($ per 1M input, $ per 1M output), if known
+    waits: int = 0                   # times the provider's rate limit made us wait
+    waited: float = 0.0              # seconds spent waiting for it
+
+    def note_wait(self, seconds):
+        with _LOCK:
+            self.waits += 1; self.waited += seconds
 
     def add(self, label, inp, out, stop, rid=""):
         with _LOCK:                      # several articles may be read at once
@@ -83,7 +89,8 @@ class AnthropicClient:
         self._anthropic = anthropic
         if not api_key and not use_env:
             raise ValueError("no API key was given")
-        self.c = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+        # retries are handled below (max_retries=0), so rate-limit waits can be counted and shown to the user
+        self.c = anthropic.Anthropic(api_key=api_key, max_retries=0) if api_key else anthropic.Anthropic(max_retries=0)
         self.model, self.effort = model, effort
         self.usage = Usage(price=PRICE.get(model))
 
@@ -105,7 +112,7 @@ class AnthropicClient:
 
     def json(self, system, user, schema, max_tokens=32000, label="", doc=None, images=None, doc_first=False):
         a = self._anthropic
-        for attempt in range(4):
+        for attempt in range(7):
             try:
                 with self.c.beta.messages.stream(
                     model=self.model, max_tokens=max_tokens, system=system,
@@ -115,10 +122,17 @@ class AnthropicClient:
                 ) as s:
                     r = s.get_final_message()
                 break
-            except (a.RateLimitError, a.InternalServerError, a.APIConnectionError):
-                if attempt == 3:
+            except (a.RateLimitError, a.InternalServerError, a.APIConnectionError) as e:
+                if attempt == 6:
                     raise
-                time.sleep(15 * (attempt + 1))
+                wait = 15.0 * (attempt + 1)
+                if isinstance(e, a.RateLimitError):
+                    try:
+                        wait = max(5.0, float(e.response.headers.get("retry-after", wait)))
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                    self.usage.note_wait(wait)
+                time.sleep(wait)
         self.usage.add(label, r.usage.input_tokens, r.usage.output_tokens, r.stop_reason, getattr(r, "id", ""))
         if r.stop_reason == "refusal":
             raise RuntimeError(f"model declined ({label})")
@@ -149,7 +163,14 @@ class OpenAICompatClient:
         for attempt in range(4):
             r = httpx.post(f"{self.base}/chat/completions", json=body, headers=self.headers, timeout=self.timeout)
             if r.status_code in (429, 500, 502, 503, 504) and attempt < 3:
-                time.sleep(10 * (attempt + 1)); continue
+                wait = 10.0 * (attempt + 1)
+                if r.status_code == 429:
+                    try:
+                        wait = max(5.0, float(r.headers.get("retry-after", wait)))
+                    except (TypeError, ValueError):
+                        pass
+                    self.usage.note_wait(wait)
+                time.sleep(wait); continue
             return r
 
     native_pdf = False

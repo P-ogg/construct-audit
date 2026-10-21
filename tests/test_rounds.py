@@ -58,3 +58,46 @@ def test_app_reads_in_rounds():
     assert at.session_state["summary"].shape[0] == 23
     assert any("Read 23 articles" in s.value for s in at.success)
     shutil.rmtree(d)
+
+
+class Slow(Stub):
+    """A stub that takes 0.3 s per call and can pretend the provider's rate limit made it wait."""
+    def __init__(self, coder, limited=False):
+        super().__init__(coder); self.limited = limited
+    def json(self, *a, **k):
+        import time
+        time.sleep(0.3)
+        if self.limited:
+            self.usage.note_wait(1.0)
+        return super().json(*a, **k)
+
+
+def test_coders_run_together_and_report_steps():
+    import time
+    d, files = pdfs(1)
+    A, B = Slow("A"), Slow("B"); coders = run.Coders(var_a=A, var_b=B, mat_a=A, mat_b=B, reviewer=B)
+    steps = []
+    t = time.time()
+    run.extract_article(files[0], coders, d / "work", progress=steps.append)
+    took = time.time() - t
+    assert took < 1.5, took                              # 4 coder calls + 1 review at 0.3 s: ~0.9 s together, 1.5 s one after another
+    assert steps[:3] == ["extracting the text", "listing the variables (both coders)", "copying the correlation table (both coders)"]
+    seen = []
+    run.extract_many(files, run.Coders(var_a=Slow("A"), var_b=Slow("B"), mat_a=Slow("A"), mat_b=Slow("B"), reviewer=Slow("B")),
+                     d / "work2", workers=1, on_tick=lambda s: seen.append(dict(s)), tick=0.1)
+    assert any(v[0].startswith("listing") for s in seen for v in s.values()) and list(seen[-1].values())[0][0] == "done"
+    shutil.rmtree(d)
+
+
+def test_app_warns_about_rate_limits_and_slows_down():
+    d, files = pdfs(12)
+    A, B = Slow("A", limited=True), Slow("B")
+    at = AppTest.from_file("app/streamlit_app.py", default_timeout=300).run()
+    at.session_state["coders"] = run.Coders(var_a=A, var_b=B, mat_a=A, mat_b=B, reviewer=B)
+    at.session_state["queue"] = files; at.session_state["done"] = {}; at.session_state["total"] = len(files)
+    at.session_state["workers"] = 5
+    at.run()
+    assert not at.exception, at.exception
+    assert len(at.session_state["done"]) == 12
+    assert at.session_state["workers"] < 5                 # halved after a limited round
+    shutil.rmtree(d)

@@ -228,6 +228,7 @@ with tab_run:
                 else:
                     ss.coders = run.Coders.one_model(client())
                 ss.queue = sorted(folder.glob("*.pdf")); ss.done = {}; ss.total = len(ss.queue)
+                ss.workers, ss.started = WORKERS, time.time()
             except Exception as e:
                 ss.read_error = llm.explain(e)
         else:
@@ -241,14 +242,28 @@ with tab_run:
             st.download_button("Save progress", run.save_progress(arts), file_name="construct_audit_progress.zip",
                                mime="application/zip", on_click="ignore",
                                help="If the page closes, upload this file under 'Resume an earlier run' to continue where you stopped.")
+        workers = ss.get("workers", WORKERS)
         batch, ss.queue = ss.queue[:ROUND], ss.queue[ROUND:]
-        note = st.empty()
-        note.caption(f"Reading {', '.join(p.name for p in batch[:3])}{'...' if len(batch) > 3 else ''}")
-        got = run.extract_many(batch, ss.coders, arts, workers=WORKERS)
+        st.caption(f"Each article takes a few minutes: two coders list its variables and copy its table, then a reviewer settles "
+                   f"disagreements. {workers} article(s) are read at a time.")
+        live, limit_note = st.empty(), st.empty()
+        waits_before = sum(u.waits for _, u in ss.coders.usage())
+
+        def show(status):
+            rows = [dict(article=Path(p).stem, step=status[p][0] if p in status else "waiting for its turn",
+                         minutes=round(status[p][1] / 60, 1) if p in status else None) for p in batch]
+            live.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+            if sum(u.waits for _, u in ss.coders.usage()) > waits_before:
+                limit_note.warning("Your model account's speed limit is slowing this down. The tool waits and continues by itself. "
+                                   "New Anthropic accounts get higher limits after some use (console.anthropic.com → Settings → Limits).")
+
+        show({})
+        got = run.extract_many(batch, ss.coders, arts, workers=workers, on_tick=show)
+        if sum(u.waits for _, u in ss.coders.usage()) > waits_before:
+            ss.workers = max(1, workers // 2)             # the account is being limited: send fewer articles at once next round
         ss.done.update(got)
         for p in batch:                                   # the PDF and its text are no longer needed
             run.forget_text(p, arts); Path(p).unlink(missing_ok=True)
-        note.empty()
         failed = [r for r in got.values() if isinstance(r, Exception)]
         if failed and len(failed) == len(got) and len(ss.done) == len(got):
             ss.queue = []                                 # every article of the first round failed: almost always the key or model
@@ -263,7 +278,9 @@ with tab_run:
         if errors:
             ss.read_error = (f"{len(errors)} of {len(ss.done)} articles could not be read. " if S else "No article could be read. ") + llm.explain(errors[0])
         if S:
-            ss.read_message = f"Read {len(S)} articles: {len(C)} correlations. {cost_text(ss.coders.usage())}"
+            waited = sum(u.waited for _, u in ss.coders.usage())
+            ss.read_message = (f"Read {len(S)} articles: {len(C)} correlations. {cost_text(ss.coders.usage())}"
+                               + (f" Your account's speed limit added about {waited / 60:.0f} minutes of waiting." if waited >= 60 else ""))
         if ss.V is not None and ss.C is not None:
             prepare()
     if ss.get("read_error"):
