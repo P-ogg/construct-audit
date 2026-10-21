@@ -35,10 +35,10 @@ from caudit import audit, codebook, labels, llm, measures, report, schema, templ
 from caudit.extract import run  # noqa: E402
 
 MAX_PDFS = 100
-WORKERS = 5        # articles read at once
 ROUND = 10         # articles per round; the page refreshes between rounds so progress can be saved
 CLAUDE_PER_ARTICLE = 1.0     # US$, rough
 HOSTED = str(ROOT).startswith("/mount/src")      # Streamlit Community Cloud: "this computer" is the server, not the visitor's
+WORKERS = 2 if HOSTED else 5   # articles read at once; the free hosting has about 1 GB of memory
 SERVICES = {  # label shown -> (provider id, server address, where to get a key)
     "OpenRouter: hundreds of open models": ("openrouter", "https://openrouter.ai/api/v1", "https://openrouter.ai/keys"),
     "Groq: fast open models": ("groq", "https://api.groq.com/openai/v1", "https://console.groq.com/keys"),

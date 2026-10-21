@@ -8,3 +8,4 @@ pypdfium2>=4.30
 pillow>=10.0
 streamlit>=1.58
 openpyxl>=3.1
+pyarrow<25            # 26.0 has a known crash (apache/arrow#50471)

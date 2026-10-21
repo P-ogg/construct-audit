@@ -138,7 +138,14 @@ def extract_article(pdf_path, coders, workdir, article_id=None, progress=None):
     pdf_path = Path(pdf_path); art = article_id or pdf_path.stem
     wd = article_dir(pdf_path, workdir, article_id); wd.mkdir(parents=True, exist_ok=True)
     say("extracting the text")
-    text = pdfx.pdf_text(pdf_path, cache_dir=wd)
+    info = pdfx.analyse(pdf_path, cache_dir=wd)          # one pass over the PDF, shared by every step below
+    text = info["text"]
+    images = {}                                         # rendered once per article (per kind), not once per call
+
+    def page_images(upright):
+        if upright not in images:
+            images[upright] = pdfx.table_images(pdf_path, include_upright_tables=upright, info=info)
+        return images[upright]
     hay = verify.haystack(text)
     log, flags = [], []
 
@@ -146,7 +153,7 @@ def extract_article(pdf_path, coders, workdir, article_id=None, progress=None):
         native = getattr(client, "native_pdf", False)
         # Claude reads the PDF itself, so it gets only sideways tables turned upright; text-only models also get the
         # best upright table pages, the only way they see a table's layout and its minus signs.
-        imgs = lambda: pdfx.table_images(pdf_path, include_upright_tables=not native) if getattr(client, "vision", native) else []
+        imgs = lambda: page_images(not native) if getattr(client, "vision", native) else []
         return _cached(wd / f"{name}.{_tag(client)}.json", lambda: client.json(system, prompt, schema, max_tokens=max_tokens, label=f"{art} {name}",
                                                               doc=_doc(client, pdf_path, text), images=imgs(), doc_first=doc_first))
 
