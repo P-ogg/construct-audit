@@ -82,6 +82,20 @@ class Coders:
         return out
 
 
+def _tidy(obj, schema):
+    """Make a reply match its schema's shapes: a missing or null list becomes [], a null text "". Models sometimes
+    answer null for an empty part (an article with no correlation table), which would otherwise crash the steps below."""
+    t = schema.get("type")
+    if t == "array":
+        return [_tidy(x, schema.get("items", {})) for x in (obj if isinstance(obj, list) else [])]
+    if t == "object":
+        obj = obj if isinstance(obj, dict) else {}
+        return {**obj, **{k: _tidy(obj.get(k), sub) for k, sub in schema.get("properties", {}).items()}}
+    if t == "string":
+        return "" if obj is None else obj if isinstance(obj, str) else str(obj)
+    return obj
+
+
 def _cached(path, fn):
     if path.exists():
         return json.loads(path.read_text())
@@ -154,8 +168,8 @@ def extract_article(pdf_path, coders, workdir, article_id=None, progress=None):
         # Claude reads the PDF itself, so it gets only sideways tables turned upright; text-only models also get the
         # best upright table pages, the only way they see a table's layout and its minus signs.
         imgs = lambda: page_images(not native) if getattr(client, "vision", native) else []
-        return _cached(wd / f"{name}.{_tag(client)}.json", lambda: client.json(system, prompt, schema, max_tokens=max_tokens, label=f"{art} {name}",
-                                                              doc=_doc(client, pdf_path, text), images=imgs(), doc_first=doc_first))
+        return _tidy(_cached(wd / f"{name}.{_tag(client)}.json", lambda: client.json(system, prompt, schema, max_tokens=max_tokens, label=f"{art} {name}",
+                                                              doc=_doc(client, pdf_path, text), images=imgs(), doc_first=doc_first)), schema)
 
     # 1-2. variables and roster
     b_first = getattr(coders, "framing", "mixed") == "article-first"
@@ -354,6 +368,10 @@ def extract_many(pdfs, coders, workdir, workers=5, on_done=None, on_tick=None, t
                 try:
                     out[p] = f.result()
                 except Exception as e:               # one bad article must not stop a literature
+                    import traceback
+                    tb = [fr for fr in traceback.extract_tb(e.__traceback__) if "caudit" in fr.filename]
+                    if tb:
+                        e.where = f"{Path(tb[-1].filename).name} line {tb[-1].lineno}"
                     out[p] = e
                 status[p] = ("done" if not isinstance(out[p], Exception) else "could not be read", time.time())
                 if on_done:
@@ -369,7 +387,8 @@ def collect(results):
     V, C, L, F, Sm = [], [], [], [], []
     for p, r in sorted(results.items(), key=lambda t: str(t[0])):
         if isinstance(r, Exception):
-            F.append(dict(article=Path(p).stem, study="", check="failed", detail=str(r)[:300])); continue
+            where = f" (at {r.where})" if getattr(r, "where", "") else ""
+            F.append(dict(article=Path(p).stem, study="", check="failed", detail=f"{type(r).__name__}: {str(r)[:280]}{where}")); continue
         V += r["variables"]; C += r["correlations"]; L += r["log"]; F += r["flags"]; Sm.append(r["summary"])
     return V, C, L, F, Sm
 

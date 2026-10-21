@@ -102,3 +102,23 @@ def test_extract():
 
 if __name__ == "__main__":
     r = check_extract(); print("PASSED", r["summary"]); [print(" ", f) for f in r["flags"]]
+
+
+class Nulls(Stub):
+    """A model that answers null for empty parts, e.g. an article without a correlation table (a review, an appendix)."""
+    def json(self, system, user, schema, max_tokens=0, label="", doc=None, images=None, doc_first=False):
+        if "matrix" in label:
+            return {"page_basis": None, "studies": [{"study": 1, "correlation_matrix_present": False, "matrix_location": None,
+                    "matrix_quote": None, "matrix_page": None, "unlisted_variables": None, "missing_pairs": None,
+                    "matrix_rows": None, "confidence": "low"}]}
+        if "variables" in label and self.coder == "A":
+            return {"page_basis": None, "studies": None}
+        return super().json(system, user, schema, max_tokens, label, doc, images, doc_first)
+
+
+def test_null_parts_do_not_crash():
+    d = Path(tempfile.mkdtemp()); make(d / "pdfs")
+    A, B = Nulls("A"), Nulls("B")
+    r = run.extract_article(d / "pdfs" / "A001.pdf", run.Coders(var_a=A, var_b=B, mat_a=A, mat_b=B, reviewer=B), d / "work")
+    assert r["correlations"] == [] and r["summary"]["variables"] == 4       # no table: no correlations, but no crash
+    shutil.rmtree(d)

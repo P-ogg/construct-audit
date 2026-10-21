@@ -302,6 +302,7 @@ with tab_run:
                                + (f" Your account's speed limit added about {waited / 60:.0f} minutes of waiting." if waited >= 60 else ""))
         if ss.V is not None and ss.C is not None:
             prepare()
+        st.rerun()                                    # redraw without the last round's progress table
     if ss.get("read_error"):
         st.error(ss.read_error)
     if ss.get("read_message"):
