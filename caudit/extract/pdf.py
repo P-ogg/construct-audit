@@ -109,12 +109,16 @@ def render(path, pages_with_turn, scale=RENDER_SCALE):
     out = []
     with _PDFIUM:
         doc = pdfium.PdfDocument(str(path))
-        for sheet, turn in pages_with_turn:
-            if 1 <= sheet <= len(doc):
-                pil = doc[sheet - 1].render(scale=scale).to_pil().convert("RGB").rotate(turn, expand=True)
-                buf = io.BytesIO(); pil.save(buf, format="JPEG", quality=JPEG_QUALITY)
-                out.append((base64.standard_b64encode(buf.getvalue()).decode(), "image/jpeg"))
-        doc.close()
+        try:
+            for sheet, turn in pages_with_turn:
+                if 1 <= sheet <= len(doc):
+                    page = doc[sheet - 1]; bitmap = page.render(scale=scale)
+                    pil = bitmap.to_pil().convert("RGB").rotate(turn, expand=True)
+                    bitmap.close(); page.close()          # close children before the document (pypdfium2 5 checks this)
+                    buf = io.BytesIO(); pil.save(buf, format="JPEG", quality=JPEG_QUALITY)
+                    out.append((base64.standard_b64encode(buf.getvalue()).decode(), "image/jpeg"))
+        finally:
+            doc.close()
     return out
 
 
