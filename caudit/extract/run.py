@@ -53,6 +53,8 @@ class Coders:
     mat_a: object
     mat_b: object
     reviewer: object
+    framing: str = "mixed"     # "mixed": coder A reads the article first, coder B the instructions first (more independent);
+                               # "article-first": both read the article first, so Claude's prompt cache is shared (cheaper)
 
     @classmethod
     def claude(cls, api_key=None):
@@ -149,9 +151,10 @@ def extract_article(pdf_path, coders, workdir, article_id=None, progress=None):
                                                               doc=_doc(client, pdf_path, text), images=imgs(), doc_first=doc_first))
 
     # 1-2. variables and roster
+    b_first = getattr(coders, "framing", "mixed") == "article-first"
     say("listing the variables (both coders)")
     va, vb = _both(lambda: ask(coders.var_a, PROMPT_VARS, VAR_SCHEMA, "variables_a", doc_first=True),
-                   lambda: ask(coders.var_b, PROMPT_VARS, VAR_SCHEMA, "variables_b", doc_first=False))
+                   lambda: ask(coders.var_b, PROMPT_VARS, VAR_SCHEMA, "variables_b", doc_first=b_first))
     roster = vb
     items = []                                   # disagreements for the reviewer
     sa = {s["study"]: s for s in va["studies"]}
@@ -190,7 +193,7 @@ def extract_article(pdf_path, coders, workdir, article_id=None, progress=None):
     prompt = PROMPT_MATRIX.replace("{VARIABLE_LIST}", roster_list)
     say("copying the correlation table (both coders)")
     ma, mb = _both(lambda: ask(coders.mat_a, prompt, MATRIX_SCHEMA, "matrix_a", doc_first=True),
-                   lambda: ask(coders.mat_b, prompt, MATRIX_SCHEMA, "matrix_b", doc_first=False))
+                   lambda: ask(coders.mat_b, prompt, MATRIX_SCHEMA, "matrix_b", doc_first=b_first))
 
     # compare cells: agreements are kept, disagreements go to the reviewer with the variable disagreements
     def cellmap(m):
@@ -220,7 +223,7 @@ def extract_article(pdf_path, coders, workdir, article_id=None, progress=None):
     # 4. one reviewer pass for all disagreements of the article; Python decides whether each answer stands
     if items:
         say(f"settling {len(items)} disagreement(s) (reviewer)")
-    decided = rvw.settle(items, lambda p, n: ask(coders.reviewer, p, rvw.SCHEMA, f"review_{n}", doc_first=False, system=rvw.SYSTEM), hay) if items else {}
+    decided = rvw.settle(items, lambda p, n: ask(coders.reviewer, rvw.SYSTEM + "\n\n" + p, rvw.SCHEMA, f"review_{n}", doc_first=True), hay) if items else {}
     vars_by = {(s["study"], v["variable"]): v for s in roster["studies"] for v in s["variables"]}
     study_by = {s["study"]: s for s in roster["studies"]}
     for it in items:

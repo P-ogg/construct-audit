@@ -40,14 +40,20 @@ class Usage:
         with _LOCK:
             self.waits += 1; self.waited += seconds
 
-    def add(self, label, inp, out, stop, rid=""):
+    cache_write: int = 0             # input tokens written to the provider's prompt cache (billed at 1.25x)
+    cache_read: int = 0              # input tokens read from it (billed at 0.1x)
+
+    def add(self, label, inp, out, stop, rid="", cache_write=0, cache_read=0):
         with _LOCK:                      # several articles may be read at once
             self.calls += 1; self.input_tokens += inp or 0; self.output_tokens += out or 0
-            self.log.append(dict(label=label, input=inp, output=out, stop=stop, id=rid))
+            self.cache_write += cache_write or 0; self.cache_read += cache_read or 0
+            self.log.append(dict(label=label, input=inp, output=out, stop=stop, id=rid, cache_write=cache_write, cache_read=cache_read))
 
     def cost(self, model=None):
         p = self.price or PRICE.get(model or "", None)
-        return None if p is None else (self.input_tokens * p[0] + self.output_tokens * p[1]) / 1e6
+        if p is None:
+            return None
+        return (self.input_tokens * p[0] + self.cache_write * p[0] * 1.25 + self.cache_read * p[0] * 0.1 + self.output_tokens * p[1]) / 1e6
 
 
 def parse_json(text):
@@ -107,6 +113,10 @@ class AnthropicClient:
                 parts.append({"type": "text", "text": "ARTICLE TEXT\n" + doc["text"]})
         for b64, mime in images or []:
             parts.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}})
+        if parts and doc_first:
+            # the article comes first, so later calls that also start with it (same model, same system prompt) read it
+            # from the prompt cache at a tenth of the price; calls that start with instructions cannot share it
+            parts[-1] = {**parts[-1], "cache_control": {"type": "ephemeral"}}
         instr = {"type": "text", "text": user}
         return parts + [instr] if doc_first else [instr] + parts
 
@@ -133,7 +143,8 @@ class AnthropicClient:
                         pass
                     self.usage.note_wait(wait)
                 time.sleep(wait)
-        self.usage.add(label, r.usage.input_tokens, r.usage.output_tokens, r.stop_reason, getattr(r, "id", ""))
+        self.usage.add(label, r.usage.input_tokens, r.usage.output_tokens, r.stop_reason, getattr(r, "id", ""),
+                       getattr(r.usage, "cache_creation_input_tokens", 0) or 0, getattr(r.usage, "cache_read_input_tokens", 0) or 0)
         if r.stop_reason == "refusal":
             raise RuntimeError(f"model declined ({label})")
         if r.stop_reason == "max_tokens":

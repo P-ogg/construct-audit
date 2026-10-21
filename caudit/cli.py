@@ -46,6 +46,7 @@ def do_extract(a):
         coders = run.Coders.roles(pick(a.coder_a), pick(a.coder_b), pick(a.reviewer))
     else:
         coders = run.Coders.claude() if c is None else run.Coders.one_model(c)
+    coders.framing = a.framing
     summ = run.extract_folder(a.pdfs, coders, a.out, workers=a.workers)
     cost = [(m, u.cost(m)) for m, u in coders.usage()]
     print(summ.to_string(index=False)); print("model cost:", ", ".join(f"{m} ${x:.2f}" if x is not None else f"{m} (price unknown)" for m, x in cost))
@@ -92,6 +93,8 @@ def main(argv=None):
         p.add_argument("--provider", default="anthropic"); p.add_argument("--model"); p.add_argument("--base-url")
         p.add_argument("--vision", action="store_true", help="the open-weights model can read images (send table pages)")
         p.add_argument("--workers", type=int, default=5, help="articles read at once (default 5)")
+        p.add_argument("--framing", choices=["mixed", "article-first"], default="mixed",
+                       help="article-first: both coders read the article first, so Claude's prompt cache is shared (cheaper)")
         for role in ("--coder-a", "--coder-b", "--reviewer"):
             p.add_argument(role, metavar="PROVIDER:MODEL", help="a different model for this role")
     e = sub.add_parser("extract"); e.add_argument("pdfs"); e.add_argument("-o", "--out", required=True); models(e)
