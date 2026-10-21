@@ -30,6 +30,9 @@ SERVICES = {  # label shown -> (provider id, server address, where to get a key)
                           "Ollama on this computer": ("ollama", "http://localhost:11434/v1", "")}),
     "Another OpenAI-compatible service": ("openai-compat", "", ""),
 }
+SERVICE_NAME = {"anthropic": "Anthropic", "openrouter": "OpenRouter", "groq": "Groq", "openai-compat": "Other service"}
+PLACEHOLDER = {"anthropic": llm.ANTHROPIC_MODEL, "openrouter": "e.g. qwen/qwen3.8-27b", "groq": "e.g. qwen/qwen3.6-27b",
+               "lmstudio": "the model loaded in LM Studio", "ollama": "e.g. qwen3:8b", "openai-compat": "the service's model name"}
 ROLE_SERVICES = {"Claude (Anthropic)": ("anthropic", "", "https://console.anthropic.com/settings/keys"), **SERVICES}
 SUMMARY_COLUMNS = {"article": "Article", "studies": "Studies", "variables": "Variables", "correlations": "Correlations",
                    "agreed": "Values both coders agreed on", "reviewed": "Disagreements sent to the reviewer",
@@ -105,7 +108,7 @@ with tab_run:
         provider, base, keypage = SERVICES[svc_label]
         if provider == "openai-compat" or not HOSTED and provider in ("lmstudio", "ollama"):
             base = st.text_input("Server address", value=base, help="The service's OpenAI-compatible address, ending in /v1.")
-        model = st.text_input("Model name", placeholder="e.g. qwen/qwen3-235b-a22b",
+        model = st.text_input("Model name", placeholder=PLACEHOLDER.get(provider, "model name"),
                               help="The exact name from the provider's list of models.")
         local = provider in ("lmstudio", "ollama")
         key = "" if local else st.text_input("API key", type="password", help="Used only in this session. Never stored.")
@@ -114,7 +117,8 @@ with tab_run:
         vision = st.checkbox("This model can read images", help="Then it also sees pictures of the table pages, which helps with signs and layout.")
         priced = False
     else:
-        st.caption("Two coders read each article separately. The reviewer settles only what they disagree on.")
+        st.caption("Two coders read each article separately. The reviewer settles only what they disagree on. "
+                   "Pick any service for each role; a key box appears below for each service you pick.")
         roles, cols = {}, st.columns(3)
         for col, (role, default) in zip(cols, (("Coder A", 0), ("Coder B", 1), ("Reviewer", 0))):
             with col:
@@ -122,14 +126,15 @@ with tab_run:
                 svc = ROLE_SERVICES[lab][0]
                 # keyed by service, so switching service does not keep another service's model name
                 mdl = st.text_input("Model", key=f"mdl_{role}_{svc}", value=llm.ANTHROPIC_MODEL if svc == "anthropic" else "",
-                                    placeholder="e.g. qwen/qwen3-235b-a22b")
+                                    placeholder=PLACEHOLDER.get(svc, "model name"))
                 roles[role] = (svc, mdl, ROLE_SERVICES[lab][1])
         for svc in dict.fromkeys(v[0] for v in roles.values()):
             if svc not in ("lmstudio", "ollama"):
-                keys[svc] = st.text_input(f"API key for {svc}", type="password", key=f"key_{svc}", help="Used only in this session. Never stored.")
+                keys[svc] = st.text_input(f"{SERVICE_NAME.get(svc, svc)} API key", type="password", key=f"key_{svc}",
+                                          help="Used only in this session. Never stored.")
         if any(v[0] == "openai-compat" for v in roles.values()):
             keys["_base"] = st.text_input("Server address for the other service", key="base_other")
-        vision = st.checkbox("The open models can read images", help="Then they also see pictures of the table pages.")
+        vision = st.checkbox("The open models you picked can read images", help="Then they also see pictures of the table pages.")
         provider, model, base = "roles", None, None
         priced = all(v[0] == "anthropic" for v in roles.values())
         key = all(v for k, v in keys.items()) and all(m for _, m, _ in roles.values())
