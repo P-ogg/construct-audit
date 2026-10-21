@@ -15,6 +15,22 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import hashlib, importlib  # noqa: E402
+
+
+def _fresh_caudit():
+    """Streamlit Cloud reloads this script after a push but keeps the library modules it already imported, so new app
+    code can meet old library code. Reload the library whenever its source changed since it was imported."""
+    import caudit
+    digest = hashlib.md5(b"".join(f.read_bytes() for f in sorted((ROOT / "caudit").rglob("*.py")))).hexdigest()
+    if getattr(caudit, "_source_digest", None) != digest:
+        names = sorted((n for n in sys.modules if n == "caudit" or n.startswith("caudit.")), key=lambda n: -n.count("."))
+        for n in names:                      # deepest first, so packages see their reloaded submodules
+            importlib.reload(sys.modules[n])
+        caudit._source_digest = digest
+
+
+_fresh_caudit()
 from caudit import audit, codebook, labels, llm, measures, report, schema, template  # noqa: E402
 from caudit.extract import run  # noqa: E402
 
@@ -247,19 +263,19 @@ with tab_run:
         st.caption(f"Each article takes a few minutes: two coders list its variables and copy its table, then a reviewer settles "
                    f"disagreements. {workers} article(s) are read at a time.")
         live, limit_note = st.empty(), st.empty()
-        waits_before = sum(u.waits for _, u in ss.coders.usage())
+        waits_before = sum(getattr(u, 'waits', 0) for _, u in ss.coders.usage())
 
         def show(status):
             rows = [dict(article=Path(p).stem, step=status[p][0] if p in status else "waiting for its turn",
                          minutes=round(status[p][1] / 60, 1) if p in status else None) for p in batch]
             live.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-            if sum(u.waits for _, u in ss.coders.usage()) > waits_before:
+            if sum(getattr(u, 'waits', 0) for _, u in ss.coders.usage()) > waits_before:
                 limit_note.warning("Your model account's speed limit is slowing this down. The tool waits and continues by itself. "
                                    "New Anthropic accounts get higher limits after some use (console.anthropic.com → Settings → Limits).")
 
         show({})
         got = run.extract_many(batch, ss.coders, arts, workers=workers, on_tick=show)
-        if sum(u.waits for _, u in ss.coders.usage()) > waits_before:
+        if sum(getattr(u, 'waits', 0) for _, u in ss.coders.usage()) > waits_before:
             ss.workers = max(1, workers // 2)             # the account is being limited: send fewer articles at once next round
         ss.done.update(got)
         for p in batch:                                   # the PDF and its text are no longer needed
@@ -278,7 +294,7 @@ with tab_run:
         if errors:
             ss.read_error = (f"{len(errors)} of {len(ss.done)} articles could not be read. " if S else "No article could be read. ") + llm.explain(errors[0])
         if S:
-            waited = sum(u.waited for _, u in ss.coders.usage())
+            waited = sum(getattr(u, 'waited', 0.0) for _, u in ss.coders.usage())
             ss.read_message = (f"Read {len(S)} articles: {len(C)} correlations. {cost_text(ss.coders.usage())}"
                                + (f" Your account's speed limit added about {waited / 60:.0f} minutes of waiting." if waited >= 60 else ""))
         if ss.V is not None and ss.C is not None:
